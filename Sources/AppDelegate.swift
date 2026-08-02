@@ -410,9 +410,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func requestAutoPaste() {
         guard !AXIsProcessTrusted() else { return }
-        // Try the system dialog (it only appears if macOS has no entry for the
-        // app yet); if the permission still isn't there after a few seconds,
-        // show the guide to fix a "dead" checkbox by hand.
+        // An entry created by an older version (hash-based signature) stays
+        // "dead" even after unchecking and rechecking the box: macOS re-enables
+        // the old entry without refreshing its requirement. It has to be deleted
+        // and recreated: the reset touches only Pastello, it is a revocation and
+        // grants nothing by itself.
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        reset.arguments = ["reset", "Accessibility", "it.foolica.pastello"]
+        try? reset.run()
+        reset.waitUntilExit()
+        // Then the clean system dialog; if the permission still is not there
+        // after a few seconds, show the guide to fix things by hand.
         AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             guard let self, !AXIsProcessTrusted() else { return }
@@ -479,7 +488,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func showAbout() {
         let a = NSAlert()
-        a.messageText = "Pastello 1.6"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        a.messageText = "Pastello \(version)"
         a.informativeText = """
         Your multi-clipboard for Mac.
 
