@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = false
         popover.delegate = self
-        popover.contentSize = NSSize(width: 380, height: 470)
+        popover.contentSize = NSSize(width: 396, height: 484)
         popover.contentViewController = NSHostingController(rootView: HistoryView(store: store, actions: makeActions()))
 
         hotKey = HotKey(id: 1, keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey | shiftKey)) { [weak self] in

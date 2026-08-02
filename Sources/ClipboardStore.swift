@@ -59,8 +59,13 @@ final class ClipboardStore: ObservableObject {
         historyLimit = UserDefaults.standard.integer(forKey: "historyLimit")
         excludedApps = Set(UserDefaults.standard.stringArray(forKey: "excludedApps") ?? [])
         lastChangeCount = NSPasteboard.general.changeCount
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        dirURL = base.appendingPathComponent("Pastello", isDirectory: true)
+        // Override for tests and previews: never point at the real data by accident.
+        if let custom = ProcessInfo.processInfo.environment["PASTELLO_DATA_DIR"] {
+            dirURL = URL(fileURLWithPath: custom, isDirectory: true)
+        } else {
+            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            dirURL = base.appendingPathComponent("Pastello", isDirectory: true)
+        }
         imgDirURL = dirURL.appendingPathComponent("imgs", isDirectory: true)
         try? FileManager.default.createDirectory(at: imgDirURL, withIntermediateDirectories: true)
         thumbCache.countLimit = 60
@@ -494,6 +499,19 @@ final class ClipboardStore: ObservableObject {
         let img = NSImage(size: out.size)
         img.addRepresentation(out)
         return (img, out.representation(using: .png, properties: [:]))
+    }
+
+    private let appIconCache = NSCache<NSString, NSImage>()
+
+    /// Source app icon, small and cached, for the list rows.
+    func appIcon(for bundleID: String?) -> NSImage? {
+        guard let bundleID else { return nil }
+        if let cached = appIconCache.object(forKey: bundleID as NSString) { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 24, height: 24)
+        appIconCache.setObject(icon, forKey: bundleID as NSString)
+        return icon
     }
 
     /// Full-resolution image, only for the explicit preview.
