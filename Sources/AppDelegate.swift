@@ -400,33 +400,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func requestAutoPaste() {
         guard !AXIsProcessTrusted() else { return }
-        let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: "axPrompted") {
-            // First request: the system dialog goes straight to the right pane.
-            defaults.set(true, forKey: "axPrompted")
-            AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-            return
-        }
-        // Request already consumed: almost always means a "dead" checkbox after an
-        // update (the ad-hoc signature changes and macOS ties the permission to the
-        // specific version). Pastello has to be removed and re-added by hand.
-        closePopover()
-        let a = NSAlert()
-        a.messageText = "Enable auto-paste"
-        a.informativeText = """
-        In System Settings → Privacy & Security → Accessibility:
+        // Try the system dialog (it only appears if macOS has no entry for the
+        // app yet); if the permission still isn't there after a few seconds,
+        // show the guide to fix a "dead" checkbox by hand.
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self, !AXIsProcessTrusted() else { return }
+            self.closePopover()
+            let a = NSAlert()
+            a.messageText = "Enable auto-paste"
+            a.informativeText = """
+            In System Settings → Privacy & Security → Accessibility:
 
-        • if Pastello isn't listed, add it with "+" picking it from /Applications
-        • if it's already there but not working, select it, remove it with "−" and add it back with "+"
+            • if Pastello isn't listed, add it with "+" picking it from /Applications
+            • if it's already there but not working, select it, remove it with "−" and add it back with "+"
 
-        This happens after an app update: macOS ties the permission to the exact version installed.
-        """
-        a.addButton(withTitle: "Open Settings")
-        a.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        if a.runModal() == .alertFirstButtonReturn,
-           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
+            Starting with this version the permission survives updates: this is the last time you'll need to do it.
+            """
+            a.addButton(withTitle: "Open Settings")
+            a.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            if a.runModal() == .alertFirstButtonReturn,
+               let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 

@@ -25,7 +25,11 @@ cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp assets/menubar/MenuBarIcon.png assets/menubar/MenuBarIcon@2x.png "$APP/Contents/Resources/"
 
 xattr -cr "$APP"
-codesign --force --sign - "$APP"
+# Designated requirement based on the bundle id alone: the Accessibility
+# permission granted once survives future builds (an ad-hoc signature would
+# otherwise change its hash on every compile and macOS would invalidate it).
+codesign --force --sign - --identifier it.foolica.pastello \
+  -r='designated => identifier "it.foolica.pastello"' "$APP"
 
 rm -rf build && mkdir -p build
 ditto "$APP" "build/Pastello.app"
