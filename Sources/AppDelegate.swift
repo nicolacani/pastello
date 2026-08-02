@@ -1,8 +1,10 @@
 import AppKit
 import SwiftUI
+import Combine
 import Carbon.HIToolbox
 import ApplicationServices
 import ServiceManagement
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let pastelloPopoverOpened = Notification.Name("PastelloPopoverOpened")
@@ -17,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var previousApp: NSRunningApplication?
     private var activityToken: NSObjectProtocol?
     private var lastPopoverClose = Date.distantPast
+    private var queueHotKey: HotKey?
+    private var queuePanel: NSPanel?
+    private var previewPanel: NSPanel?
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -48,9 +54,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.contentSize = NSSize(width: 380, height: 470)
         popover.contentViewController = NSHostingController(rootView: HistoryView(store: store, actions: makeActions()))
 
-        hotKey = HotKey(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey | shiftKey)) { [weak self] in
+        hotKey = HotKey(id: 1, keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey | shiftKey)) { [weak self] in
             self?.togglePopover()
         }
+        // ⌥⌘V: pastes the next item of the paste queue.
+        queueHotKey = HotKey(id: 2, keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey | optionKey)) { [weak self] in
+            self?.advanceQueue()
+        }
+
+        // Dimmed icon while capture is paused.
+        store.$isPaused
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] paused in self?.statusItem.button?.appearsDisabled = paused }
+            .store(in: &cancellables)
+        // Queue HUD: appears when it starts, disappears shortly after the last paste.
+        store.$pasteQueue
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] queue in
+                guard let self else { return }
+                if queue.isEmpty { self.scheduleQueueHUDClose() } else { self.showQueueHUD() }
+            }
+            .store(in: &cancellables)
 
         let defaults = UserDefaults.standard
         if !defaults.bool(forKey: "didOnboard") {
@@ -61,6 +85,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.flushSync()
+    }
+
+    // pastello://add?text=…&label=…&source=… for dictation apps and scripts:
+    // the text enters the history without touching the system clipboard.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "pastello" {
+            guard url.host == "add" || url.host == "capture",
+                  let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  let text = comps.queryItems?.first(where: { $0.name == "text" })?.value,
+                  !text.isEmpty else { continue }
+            let label = comps.queryItems?.first(where: { $0.name == "label" })?.value
+            let source = comps.queryItems?.first(where: { $0.name == "source" })?.value
+            store.addExternal(text: text, label: label, source: source)
+        }
     }
 
     // MARK: - Status item and popover
@@ -88,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         previousApp = NSWorkspace.shared.frontmostApplication
         store.search = ""
+        store.typeFilter = nil
         store.multiSelection.removeAll()
         store.resetSelection()
         NSApp.activate(ignoringOtherApps: true)
@@ -100,8 +139,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.performClose(nil)
     }
 
+    func popoverDidShow(_ notification: Notification) {
+        // Invisible to screenshots, recordings and screen sharing.
+        popover.contentViewController?.view.window?.sharingType = .none
+    }
+
     func popoverDidClose(_ notification: Notification) {
         removeKeyMonitor()
+        closePreview()
         lastPopoverClose = Date()
     }
 
@@ -126,7 +171,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let cmd = e.modifierFlags.contains(.command)
         switch e.keyCode {
         case 53: // esc
-            if store.search.isEmpty { closePopover() } else { store.search = "" }
+            if previewPanel?.isVisible == true {
+                closePreview()
+            } else if !store.search.isEmpty {
+                store.search = ""
+            } else if store.typeFilter != nil {
+                store.typeFilter = nil
+            } else {
+                closePopover()
+            }
+            return true
+        case 49 where store.search.isEmpty: // space = preview, like in the Finder
+            togglePreview()
             return true
         case 36, 76: // return
             if let item = store.selectedItem { paste(item) }
@@ -182,6 +238,125 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func copyOnly(_ item: ClipItem) {
         store.copyToPasteboard(item)
         closePopover()
+    }
+
+    // MARK: - Paste queue
+
+    func startSequentialPaste() {
+        guard store.startQueue() else { return }
+        closePopover()
+        previousApp?.activate(options: [])
+    }
+
+    private func advanceQueue() {
+        guard store.dequeueNext() != nil else { return }
+        if AXIsProcessTrusted() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { self.sendCmdV() }
+        }
+    }
+
+    private func showQueueHUD() {
+        if queuePanel == nil {
+            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 400, height: 56),
+                                styleMask: [.borderless, .nonactivatingPanel],
+                                backing: .buffered, defer: false)
+            panel.level = .floating
+            panel.isFloatingPanel = true
+            panel.hidesOnDeactivate = false
+            panel.backgroundColor = .clear
+            panel.isOpaque = false
+            panel.hasShadow = false
+            panel.sharingType = .none
+            panel.ignoresMouseEvents = false
+            panel.contentView = NSHostingView(rootView: QueueHUDView(store: store) { [weak self] in
+                self?.store.cancelQueue()
+            })
+            queuePanel = panel
+        }
+        if let screen = NSScreen.main, let panel = queuePanel {
+            let f = screen.visibleFrame
+            panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.minY + 70))
+            panel.orderFrontRegardless()
+        }
+    }
+
+    private func scheduleQueueHUDClose() {
+        guard queuePanel != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+            guard let self, self.store.pasteQueue.isEmpty else { return }
+            self.queuePanel?.orderOut(nil)
+        }
+    }
+
+    // MARK: - Preview (space bar)
+
+    func togglePreview() {
+        if previewPanel?.isVisible == true {
+            closePreview()
+            return
+        }
+        guard store.selectedItem != nil else { return }
+        if previewPanel == nil {
+            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 620, height: 500),
+                                styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
+                                backing: .buffered, defer: false)
+            panel.title = "Preview"
+            panel.titlebarAppearsTransparent = true
+            panel.level = .floating
+            panel.hidesOnDeactivate = false
+            panel.isReleasedWhenClosed = false
+            panel.sharingType = .none
+            panel.contentView = NSHostingView(rootView: PreviewView(store: store))
+            panel.center()
+            previewPanel = panel
+        }
+        // The panel never becomes key: the arrows keep navigating the list in
+        // the popover and the preview follows the selection, like Quick Look in the Finder.
+        previewPanel?.orderFrontRegardless()
+    }
+
+    func closePreview() {
+        previewPanel?.orderOut(nil)
+    }
+
+    func previewItem(_ item: ClipItem) {
+        store.selectedID = item.id
+        if previewPanel?.isVisible != true { togglePreview() }
+    }
+
+    // MARK: - OCR and exclusions
+
+    func copyOCRText(_ item: ClipItem) {
+        guard let text = item.ocrText, !text.isEmpty else { return }
+        // Enters the history as new text, attributed to the image's app.
+        store.addExternal(text: text, label: nil, source: item.appName)
+        if let newItem = store.items.first {
+            store.copyToPasteboard(newItem)
+        }
+        closePopover()
+    }
+
+    func excludeApp(of item: ClipItem) {
+        guard let id = item.appBundleID else { return }
+        store.excludedApps.insert(id)
+    }
+
+    func addExcludedAppViaPanel() {
+        closePopover()
+        let panel = NSOpenPanel()
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose apps whose copies should not be recorded"
+        panel.prompt = "Exclude"
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK {
+            for url in panel.urls {
+                if let bundleID = Bundle(url: url)?.bundleIdentifier {
+                    store.excludedApps.insert(bundleID)
+                }
+            }
+        }
     }
 
     func renameItem(_ item: ClipItem) {
@@ -297,15 +472,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func showAbout() {
         let a = NSAlert()
-        a.messageText = "Pastello 1.1"
+        a.messageText = "Pastello 1.5"
         a.informativeText = """
         Your multi-clipboard for Mac.
 
         ⇧⌘V opens the history anywhere
-        ↩ pastes the selected item
-        ⌘1…⌘9 paste instantly
-        ⌘click selects multiple texts to paste together
+        ↩ pastes, Space previews, ⌘1…⌘9 paste instantly
+        ⌘click multi-select: paste together or sequentially (⌥⌘V)
         ⌘P pins to top, ⌘⌫ deletes
+        Images are searchable thanks to local OCR
 
         Developed by Nicola Cani.
         """
@@ -338,6 +513,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         menu.addItem(login)
         menu.addItem(.separator())
 
+        let pause = NSMenuItem(title: "Pause capture", action: #selector(menuPause), keyEquivalent: "")
+        pause.target = self
+        pause.state = store.isPaused ? .on : .off
+        menu.addItem(pause)
+        let ignoreNext = NSMenuItem(title: "Ignore next copy", action: #selector(menuIgnoreNext), keyEquivalent: "")
+        ignoreNext.target = self
+        menu.addItem(ignoreNext)
+        if !store.pasteQueue.isEmpty {
+            let cancelQueue = NSMenuItem(title: "Cancel paste queue", action: #selector(menuCancelQueue), keyEquivalent: "")
+            cancelQueue.target = self
+            menu.addItem(cancelQueue)
+        }
+        menu.addItem(.separator())
+
         let clearKeep = NSMenuItem(title: "Clear (keep pinned)", action: #selector(menuClearKeep), keyEquivalent: "")
         clearKeep.target = self
         menu.addItem(clearKeep)
@@ -359,6 +548,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     @objc private func menuOpen() { showPopover() }
+    @objc private func menuPause() { store.isPaused.toggle() }
+    @objc private func menuIgnoreNext() { store.ignoreNextCopy = true }
+    @objc private func menuCancelQueue() { store.cancelQueue() }
     @objc private func menuAutoPaste() { requestAutoPaste() }
     @objc private func menuLogin() { toggleLogin() }
     @objc private func menuClearKeep() { store.clear(keepPinned: true) }
@@ -373,8 +565,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             paste: { [weak self] item in self?.paste(item) },
             pasteTransformed: { [weak self] item, t in self?.paste(item, transform: t) },
             pasteCombined: { [weak self] in self?.pasteCombined() },
+            pasteSequential: { [weak self] in self?.startSequentialPaste() },
             copyOnly: { [weak self] item in self?.copyOnly(item) },
             rename: { [weak self] item in self?.renameItem(item) },
+            preview: { [weak self] item in self?.previewItem(item) },
+            copyOCR: { [weak self] item in self?.copyOCRText(item) },
+            excludeApp: { [weak self] item in self?.excludeApp(of: item) },
+            addExcludedApp: { [weak self] in self?.addExcludedAppViaPanel() },
             enableAutoPaste: { [weak self] in self?.requestAutoPaste() },
             autoPasteEnabled: { AXIsProcessTrusted() },
             toggleLogin: { [weak self] in self?.toggleLogin() },

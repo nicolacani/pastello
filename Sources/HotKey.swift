@@ -1,32 +1,41 @@
 import Carbon.HIToolbox
 
-// Global shortcut registered via Carbon: requires no Accessibility permission.
+// Global shortcuts registered via Carbon: they require no Accessibility permission.
+// A single event handler dispatches to the instances through the hotkey id.
 final class HotKey {
+    private static var registry: [UInt32: () -> Void] = [:]
+    private static var handlerInstalled = false
+
     private var hotKeyRef: EventHotKeyRef?
-    private var handlerRef: EventHandlerRef?
-    private let onPress: () -> Void
+    private let id: UInt32
 
-    init?(keyCode: UInt32, modifiers: UInt32, onPress: @escaping () -> Void) {
-        self.onPress = onPress
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
-                                 eventKind: UInt32(kEventHotKeyPressed))
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let installStatus = InstallEventHandler(GetEventDispatcherTarget(), { _, _, userData in
-            guard let userData else { return noErr }
-            let hk = Unmanaged<HotKey>.fromOpaque(userData).takeUnretainedValue()
-            DispatchQueue.main.async { hk.onPress() }
-            return noErr
-        }, 1, &spec, selfPtr, &handlerRef)
-        guard installStatus == noErr else { return nil }
-
-        let hkID = EventHotKeyID(signature: 0x50_41_53_54, id: 1) // 'PAST'
-        let registerStatus = RegisterEventHotKey(keyCode, modifiers, hkID,
-                                                 GetEventDispatcherTarget(), 0, &hotKeyRef)
-        guard registerStatus == noErr else { return nil }
+    init?(id: UInt32, keyCode: UInt32, modifiers: UInt32, onPress: @escaping () -> Void) {
+        self.id = id
+        if !Self.handlerInstalled {
+            var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
+                                     eventKind: UInt32(kEventHotKeyPressed))
+            let status = InstallEventHandler(GetEventDispatcherTarget(), { _, event, _ in
+                var hkID = EventHotKeyID()
+                GetEventParameter(event, EventParamName(kEventParamDirectObject),
+                                  EventParamType(typeEventHotKeyID), nil,
+                                  MemoryLayout<EventHotKeyID>.size, nil, &hkID)
+                DispatchQueue.main.async { HotKey.registry[hkID.id]?() }
+                return noErr
+            }, 1, &spec, nil, nil)
+            guard status == noErr else { return nil }
+            Self.handlerInstalled = true
+        }
+        Self.registry[id] = onPress
+        let hkID = EventHotKeyID(signature: 0x50_41_53_54, id: id) // 'PAST'
+        guard RegisterEventHotKey(keyCode, modifiers, hkID,
+                                  GetEventDispatcherTarget(), 0, &hotKeyRef) == noErr else {
+            Self.registry[id] = nil
+            return nil
+        }
     }
 
     deinit {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
-        if let handlerRef { RemoveEventHandler(handlerRef) }
+        HotKey.registry[id] = nil
     }
 }

@@ -5,8 +5,13 @@ struct PopoverActions {
     let paste: (ClipItem) -> Void
     let pasteTransformed: (ClipItem, @escaping (String) -> String) -> Void
     let pasteCombined: () -> Void
+    let pasteSequential: () -> Void
     let copyOnly: (ClipItem) -> Void
     let rename: (ClipItem) -> Void
+    let preview: (ClipItem) -> Void
+    let copyOCR: (ClipItem) -> Void
+    let excludeApp: (ClipItem) -> Void
+    let addExcludedApp: () -> Void
     let enableAutoPaste: () -> Void
     let autoPasteEnabled: () -> Bool
     let toggleLogin: () -> Void
@@ -33,6 +38,7 @@ struct HistoryView: View {
         VStack(spacing: 0) {
             header
             searchBar
+            filterBar
             Divider()
             if vis.isEmpty {
                 emptyState
@@ -112,6 +118,34 @@ struct HistoryView: View {
         .padding(.bottom, 8)
     }
 
+    private var filterBar: some View {
+        HStack(spacing: 4) {
+            chip(nil, "All")
+            ForEach(TypeFilter.allCases, id: \.self) { f in
+                chip(f, f.rawValue)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 7)
+    }
+
+    private func chip(_ filter: TypeFilter?, _ title: String) -> some View {
+        let active = store.typeFilter == filter
+        return Button {
+            store.typeFilter = filter
+            store.resetSelection()
+        } label: {
+            Text(title)
+                .font(.system(size: 10, weight: active ? .semibold : .regular))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(active ? brandViolet.opacity(0.16) : Color.primary.opacity(0.05)))
+                .foregroundColor(active ? brandViolet : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func list(_ vis: [ClipItem]) -> some View {
         let firstUnpinned = vis.firstIndex { !$0.pinned }
         return ScrollViewReader { proxy in
@@ -185,6 +219,10 @@ struct HistoryView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .tint(brandViolet)
+            Button("Sequentially") { actions.pasteSequential() }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Queues the items: ⌥⌘V pastes the next one, field after field")
             Button {
                 store.multiSelection.removeAll()
             } label: {
@@ -217,7 +255,35 @@ struct HistoryView: View {
                         loginOn = actions.loginEnabled()
                     }
                 ))
+                Toggle("Capture dictation", isOn: $store.captureTransient)
+                    .help("Also record transient texts pasted by dictation apps (Myna, Wispr Flow…)")
                 Divider()
+                Toggle("Pause capture", isOn: $store.isPaused)
+                Button("Ignore next copy") { store.ignoreNextCopy = true }
+                Menu("History limit") {
+                    ForEach([25, 50, 100], id: \.self) { n in
+                        Button {
+                            store.historyLimit = n
+                        } label: {
+                            if store.historyLimit == n {
+                                Label("\(n) items", systemImage: "checkmark")
+                            } else {
+                                Text("\(n) items")
+                            }
+                        }
+                    }
+                }
+                Menu("Excluded apps") {
+                    ForEach(store.excludedApps.sorted(), id: \.self) { bundleID in
+                        Button("Re-allow \(Self.appDisplayName(bundleID))") {
+                            store.excludedApps.remove(bundleID)
+                        }
+                    }
+                    if !store.excludedApps.isEmpty { Divider() }
+                    Button("Add app…") { actions.addExcludedApp() }
+                }
+                Divider()
+                Button("Delete last 5 minutes") { store.deleteRecent(minutes: 5) }
                 Button("Clear (keep pinned)") { actions.clearKeepPinned() }
                 Button("Clear everything…") { actions.clearAll() }
                 Divider()
@@ -234,6 +300,145 @@ struct HistoryView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+    }
+}
+
+extension HistoryView {
+    static func appDisplayName(_ bundleID: String) -> String {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            return FileManager.default.displayName(atPath: url.path)
+        }
+        return bundleID
+    }
+}
+
+// Floating HUD for the paste queue: shows the next item and how many remain.
+struct QueueHUDView: View {
+    @ObservedObject var store: ClipboardStore
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "list.number")
+                .foregroundStyle(brandGradient)
+            if let next = store.pasteQueue.first {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Next: \(next.preview)")
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Text("\(store.pasteQueue.count) queued · ⌥⌘V pastes")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Text("Queue finished ✓")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            Spacer(minLength: 4)
+            Button {
+                cancel()
+            } label: {
+                Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Cancel the queue")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(width: 400)
+        .background(RoundedRectangle(cornerRadius: 14).fill(.regularMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.1), lineWidth: 1))
+    }
+}
+
+// Panel preview, Quick Look style: follows the list selection.
+struct PreviewView: View {
+    @ObservedObject var store: ClipboardStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let item = store.selectedItem {
+                header(item)
+                Divider()
+                content(item)
+            } else {
+                Text("No item selected")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            Divider()
+            Text("Space or Esc to close · arrows to browse")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .padding(.vertical, 6)
+        }
+        .frame(minWidth: 480, minHeight: 360)
+    }
+
+    private func header(_ item: ClipItem) -> some View {
+        HStack(spacing: 8) {
+            if let label = item.label {
+                Image(systemName: "tag.fill").font(.system(size: 10)).foregroundColor(brandPink)
+                Text(label).font(.system(size: 13, weight: .semibold))
+            } else {
+                Text(item.preview).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            }
+            Spacer()
+            if let app = item.appName {
+                Text(app).font(.caption).foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder private func content(_ item: ClipItem) -> some View {
+        switch item.kind {
+        case .text:
+            ScrollView {
+                Text(item.text ?? "")
+                    .font(.system(size: 13, design: item.flavor == .code ? .monospaced : .default))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+            }
+        case .image:
+            VStack(spacing: 0) {
+                if let img = store.fullImage(for: item) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(10)
+                } else {
+                    Text("Image unavailable").foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if let ocr = item.ocrText, !ocr.isEmpty {
+                    Divider()
+                    ScrollView {
+                        Text(ocr)
+                            .font(.system(size: 11))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .frame(maxHeight: 110)
+                }
+            }
+        case .file:
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach((item.text ?? "").split(separator: "\n").map(String.init), id: \.self) { path in
+                        Label(path, systemImage: "doc")
+                            .font(.system(size: 12))
+                            .textSelection(.enabled)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+            }
+        }
     }
 }
 
@@ -312,6 +517,10 @@ struct ClipRow: View {
     @ViewBuilder private var menuItems: some View {
         Button("Paste") { actions.paste(item) }
         Button("Copy without pasting") { actions.copyOnly(item) }
+        Button("Preview (Space)") { actions.preview(item) }
+        if item.kind == .image, item.ocrText?.isEmpty == false {
+            Button("Copy text from image") { actions.copyOCR(item) }
+        }
         Button(item.label == nil ? "Label…" : "Edit label…") { actions.rename(item) }
         if item.kind == .text {
             Menu("Paste as…") {
@@ -332,6 +541,9 @@ struct ClipRow: View {
         }
         Button(item.pinned ? "Unpin" : "Pin to top") { store.togglePin(item) }
         Divider()
+        if let app = item.appName, item.appBundleID != nil {
+            Button("Exclude copies from \(app)") { actions.excludeApp(item) }
+        }
         Button("Delete", role: .destructive) { store.delete(item) }
     }
 

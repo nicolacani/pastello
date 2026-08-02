@@ -8,6 +8,25 @@ enum TextFlavor {
     case plain, url, email, color, code
 }
 
+// Quick type filter for the list in the popover.
+enum TypeFilter: String, CaseIterable {
+    case testo = "Text"
+    case link = "Links"
+    case immagini = "Images"
+    case file = "Files"
+    case colori = "Colors"
+
+    func matches(_ item: ClipItem) -> Bool {
+        switch self {
+        case .testo: return item.kind == .text && item.flavor != .color
+        case .link: return item.kind == .text && (item.flavor == .url || item.flavor == .email)
+        case .immagini: return item.kind == .image
+        case .file: return item.kind == .file
+        case .colori: return item.flavor == .color
+        }
+    }
+}
+
 struct ClipItem: Identifiable, Codable, Equatable {
     let id: UUID
     let kind: ClipKind
@@ -20,9 +39,10 @@ struct ClipItem: Identifiable, Codable, Equatable {
     var pinned: Bool
     var appName: String?
     var appBundleID: String?
-    // User-given name ("Project X API key"): last field with a default so the
-    // existing memberwise init and decoding of old history stay unchanged.
-    var label: String? = nil
+    // Fields added after 1.0: last and with defaults, so the existing memberwise
+    // init and the decode of the old history do not change.
+    var label: String? = nil        // label given by the user ("Project X API key")
+    var ocrText: String? = nil      // text recognized in images (Vision, local)
 
     func matchesContent(of other: ClipItem) -> Bool {
         guard kind == other.kind else { return false }
@@ -35,8 +55,8 @@ struct ClipItem: Identifiable, Codable, Equatable {
     }
 
     // preview/flavor/hexColor are re-evaluated on every row render:
-    // they must stay O(1) in the text length (up to 100k chars),
-    // so they work on a bounded prefix, never the whole string.
+    // they must stay O(1) with respect to the text length (up to 100k chars),
+    // so they work on a limited prefix, never on the whole string.
 
     var preview: String {
         switch kind {
@@ -69,7 +89,7 @@ struct ClipItem: Identifiable, Codable, Equatable {
     }
 
     var hexColor: NSColor? {
-        // utf8.count is O(1): rejects long texts right away without scanning them.
+        // utf8.count is O(1): discards long texts right away without scanning them.
         guard kind == .text, let raw = text, raw.utf8.count <= 64 else { return nil }
         var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard t.hasPrefix("#") else { return nil }
