@@ -1,0 +1,87 @@
+# Pastello
+
+**The best clipboard manager for Mac: native, instant, private.**
+
+<img src="assets/logo-preview.png" alt="Pastello" width="160">
+
+## Why Pastello
+
+Every clipboard manager asks you to trade something: speed for features, privacy for sync, simplicity for power. Pastello refuses the trade. It's a tiny native app, pure AppKit and SwiftUI with no Electron and no frameworks, that opens the instant you press ⇧⌘V, remembers everything you copy, and keeps all of it on your Mac. No cloud, no accounts, no telemetry, no subscription. Free and open source, and light enough that you'll forget it's running, right up to the moment you need that thing you copied an hour ago.
+
+## Features
+
+- **History of 50 items**: text, images, and files, saved to disk and restored on every launch.
+- **⇧⌘V global hotkey**: summon Pastello from any app, over any window.
+- **Auto-paste**: with Accessibility permission, Pastello pastes straight into the app you were using. Without it, items are still copied for you to paste with ⌘V.
+- **Pins**: keep important clips at the top; they survive cleanups.
+- **Labels**: name a clip ("Project X API key") and find it instantly; labels survive re-copies of the same text.
+- **Instant search**: filters as you type, across content, labels, and source apps.
+- **⌘1…⌘9**: paste any of the first nine items without touching the mouse.
+- **Multi-select**: ⌘click several texts, then paste them together as one.
+- **Paste as…**: UPPERCASE, lowercase, on one line, or without spaces (perfect for IBANs and codes).
+- **Smart badges**: links, emails, code, hex colors (with a live swatch), image thumbnails, files.
+- **Password-manager aware**: anything marked concealed or transient (the `org.nspasteboard.ConcealedType` convention) is never recorded.
+- **Launch at login**: one click in the gear menu.
+- **Local-only by design**: everything lives in `~/Library/Application Support/Pastello`. No cloud, no telemetry, ever.
+
+## A quick look
+
+![Menu bar, light](assets/menubar-light.png)
+![Menu bar, dark](assets/menubar-dark.png)
+
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| ⇧⌘V | Open/close Pastello anywhere |
+| ↩ | Paste the selected item |
+| ↑ ↓ | Navigate the list |
+| ⌘1…⌘9 | Paste item 1…9 instantly |
+| ⌘P | Pin/unpin |
+| ⌘⌫ | Delete |
+| esc | Clear search, then close |
+| ⌘click | Multi-select (then "Paste together") |
+
+## Install
+
+Download the DMG from the [latest release](../../releases/latest), open it and drag Pastello to Applications.
+
+> **Note:** the app is ad-hoc signed, so on first launch right-click Pastello and choose **Open** (or run `xattr -d com.apple.quarantine /Applications/Pastello.app`). For auto-paste, Pastello needs the Accessibility permission: gear menu → **Enable auto-paste…** and follow the prompt.
+
+## Build from source
+
+```bash
+./build.sh
+```
+
+Requires the Xcode Command Line Tools (`swiftc`). The script compiles, signs, and produces `build/Pastello.app`; it builds in a temporary folder, so it just works wherever you clone the repo. To install:
+
+```bash
+ditto build/Pastello.app /Applications/Pastello.app
+open /Applications/Pastello.app
+```
+
+## Data location
+
+`~/Library/Application Support/Pastello/`: `history.json` plus `imgs/` for images. Nothing else, nowhere else.
+
+### Uninstall
+
+```bash
+osascript -e 'quit app "Pastello"'; rm -rf /Applications/Pastello.app ~/Library/Application\ Support/Pastello
+```
+
+## Project structure
+
+- `Sources/`: Swift code (AppKit + SwiftUI, no Xcode project)
+  - `ClipboardStore.swift`: clipboard watching, dedup, persistence
+  - `AppDelegate.swift`: status item, popover, hotkey, auto-paste
+  - `HistoryView.swift`: the popover UI
+  - `HotKey.swift`: global shortcut via Carbon (no permissions needed)
+  - `Models.swift`: item model and type detection
+- `tools/makeicon.swift`: generates the icon via CoreGraphics
+- `build.sh`: build + ad-hoc signing
+
+## License
+
+MIT © 2026 Nicola Cani
