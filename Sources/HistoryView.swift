@@ -16,6 +16,7 @@ struct PopoverActions {
     let autoPasteEnabled: () -> Bool
     let toggleLogin: () -> Void
     let loginEnabled: () -> Bool
+    let checkUpdates: () -> Void
     let clearKeepPinned: () -> Void
     let clearAll: () -> Void
     let about: () -> Void
@@ -287,6 +288,7 @@ struct HistoryView: View {
                 Button("Clear (keep pinned)") { actions.clearKeepPinned() }
                 Button("Clear everything…") { actions.clearAll() }
                 Divider()
+                Button("Check for updates…") { actions.checkUpdates() }
                 Button("About Pastello") { actions.about() }
                 Button("Quit Pastello") { actions.quit() }
             } label: {

@@ -12,6 +12,7 @@ extension Notification.Name {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let store = ClipboardStore()
+    let updater = UpdateChecker()
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private var hotKey: HotKey?
@@ -75,6 +76,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 if queue.isEmpty { self.scheduleQueueHUDClose() } else { self.showQueueHUD() }
             }
             .store(in: &cancellables)
+
+        // Update check: shortly after launch, then at most once a day.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            self?.updater.checkAutomatically()
+        }
+        let updateTimer = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            self?.updater.checkAutomatically()
+        }
+        RunLoop.main.add(updateTimer, forMode: .common)
 
         let defaults = UserDefaults.standard
         if !defaults.bool(forKey: "didOnboard") {
@@ -469,7 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func showAbout() {
         let a = NSAlert()
-        a.messageText = "Pastello 1.5"
+        a.messageText = "Pastello 1.6"
         a.informativeText = """
         Your multi-clipboard for Mac.
 
@@ -532,6 +542,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         menu.addItem(clearAll)
         menu.addItem(.separator())
 
+        let updates = NSMenuItem(title: "Check for updates…", action: #selector(menuCheckUpdates), keyEquivalent: "")
+        updates.target = self
+        menu.addItem(updates)
         let about = NSMenuItem(title: "About Pastello", action: #selector(menuAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
@@ -548,6 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc private func menuPause() { store.isPaused.toggle() }
     @objc private func menuIgnoreNext() { store.ignoreNextCopy = true }
     @objc private func menuCancelQueue() { store.cancelQueue() }
+    @objc private func menuCheckUpdates() { updater.check(userInitiated: true) }
     @objc private func menuAutoPaste() { requestAutoPaste() }
     @objc private func menuLogin() { toggleLogin() }
     @objc private func menuClearKeep() { store.clear(keepPinned: true) }
@@ -573,6 +587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             autoPasteEnabled: { AXIsProcessTrusted() },
             toggleLogin: { [weak self] in self?.toggleLogin() },
             loginEnabled: { [weak self] in self?.loginEnabled ?? false },
+            checkUpdates: { [weak self] in self?.updater.check(userInitiated: true) },
             clearKeepPinned: { [weak self] in self?.store.clear(keepPinned: true) },
             clearAll: { [weak self] in self?.clearAllWithConfirm() },
             about: { [weak self] in self?.showAbout() },

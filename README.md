@@ -30,6 +30,7 @@ Every clipboard manager asks you to trade something: speed for features, privacy
 - **Invisible popover**: the Pastello window never appears in screenshots, screen recordings, or shared screens.
 - **Password-manager aware**: anything marked concealed (the `org.nspasteboard.ConcealedType` convention) is never recorded.
 - **Launch at login**: one click in the gear menu.
+- **Built-in updates**: a daily check against GitHub Releases, plus "Check for updates" in the gear menu. One click downloads the DMG and Pastello replaces and relaunches itself.
 - **Local-only by design**: everything lives in `~/Library/Application Support/Pastello`, OCR included. No cloud, no telemetry, ever.
 
 ## A quick look
