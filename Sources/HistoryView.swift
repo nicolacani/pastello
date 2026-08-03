@@ -23,13 +23,18 @@ struct PopoverActions {
     let quit: () -> Void
 }
 
-let brandPink = Color(red: 0.95, green: 0.36, blue: 0.63)
-let brandViolet = Color(red: 0.49, green: 0.36, blue: 0.96)
-let brandGradient = LinearGradient(colors: [brandPink, brandViolet],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-// Selection: a gradient veil plus a thin stroke, instead of flat gray.
-let selectionFill = LinearGradient(colors: [brandViolet.opacity(0.14), brandPink.opacity(0.09)],
-                                   startPoint: .leading, endPoint: .trailing)
+// "Stationery" palette: a single warm accent, the coral of the dot on the
+// icon. Flat tints, zero gradients in the UI: the identity lives in the
+// pastel-card badge tints and in native restraint, not in AI purples.
+let accent = Color(red: 0.95, green: 0.42, blue: 0.22)
+// Adaptive text variant: terracotta in light mode, light coral in dark mode.
+let accentText = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? NSColor(srgbRed: 1.00, green: 0.60, blue: 0.44, alpha: 1)
+        : NSColor(srgbRed: 0.70, green: 0.29, blue: 0.12, alpha: 1)
+})
+// Selection veil: barely perceptible coral, flat.
+let selectionFill = Color(red: 0.95, green: 0.42, blue: 0.22).opacity(0.09)
 
 /// Keycap-style key for the shortcuts shown in the interface.
 struct KeyCap: View {
@@ -96,17 +101,17 @@ struct HistoryView: View {
             if let glyph = Bundle.main.image(forResource: "MenuBarIcon") {
                 Image(nsImage: glyph)
                     .renderingMode(.template)
-                    .foregroundStyle(brandGradient)
+                    .foregroundStyle(accent)
             }
             Text("Pastello")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(brandGradient)
+                .foregroundColor(.primary)
             Spacer()
             Text("\(store.items.count)")
                 .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2.5)
-                .background(Capsule().fill(brandGradient.opacity(0.12)))
+                .background(Capsule().fill(Color.primary.opacity(0.055)))
                 .foregroundColor(.secondary)
                 .help("Items in history")
             gearMenu
@@ -181,7 +186,7 @@ struct HistoryView: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(searchFocused ? brandViolet : .secondary)
+                .foregroundColor(searchFocused ? accentText : .secondary)
             TextField("Search your clips…", text: $store.search)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
@@ -205,8 +210,7 @@ struct HistoryView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(searchFocused ? AnyShapeStyle(brandGradient.opacity(0.55))
-                                            : AnyShapeStyle(Color.primary.opacity(0.06)),
+                .strokeBorder(searchFocused ? accent.opacity(0.55) : Color.primary.opacity(0.06),
                               lineWidth: 1)
         )
         .animation(.easeOut(duration: 0.15), value: searchFocused)
@@ -237,10 +241,9 @@ struct HistoryView: View {
                 .padding(.horizontal, 9)
                 .padding(.vertical, 3.5)
                 .background(
-                    Capsule().fill(active ? AnyShapeStyle(brandGradient)
-                                          : AnyShapeStyle(Color.primary.opacity(0.055)))
+                    Capsule().fill(active ? accent.opacity(0.15) : Color.primary.opacity(0.055))
                 )
-                .foregroundColor(active ? .white : .secondary)
+                .foregroundColor(active ? accentText : .secondary)
         }
         .buttonStyle(.plain)
     }
@@ -307,12 +310,12 @@ struct HistoryView: View {
             Spacer()
             ZStack {
                 Circle()
-                    .fill(brandGradient.opacity(0.14))
+                    .fill(accent.opacity(0.10))
                     .frame(width: 76, height: 76)
-                    .overlay(Circle().strokeBorder(brandGradient.opacity(0.35), lineWidth: 1))
+                    .overlay(Circle().strokeBorder(accent.opacity(0.28), lineWidth: 1))
                 Image(systemName: store.search.isEmpty ? "doc.on.clipboard" : "magnifyingglass")
                     .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(brandGradient)
+                    .foregroundColor(accent)
             }
             if store.search.isEmpty {
                 Text("Nothing here yet")
@@ -351,7 +354,7 @@ struct HistoryView: View {
             Button("Paste together") { actions.pasteCombined() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .tint(brandViolet)
+                .tint(accent)
             Button("Sequentially") { actions.pasteSequential() }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -366,7 +369,7 @@ struct HistoryView: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 7)
-        .background(brandViolet.opacity(0.07))
+        .background(accent.opacity(0.06))
     }
 
     private var footer: some View {
@@ -412,7 +415,7 @@ struct QueueHUDView: View {
         HStack(spacing: 10) {
             Image(systemName: "list.number")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(brandGradient)
+                .foregroundColor(accent)
             if let next = store.pasteQueue.first {
                 VStack(alignment: .leading, spacing: 1.5) {
                     Text("Next: \(next.preview)")
@@ -447,7 +450,7 @@ struct QueueHUDView: View {
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.regularMaterial))
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(brandViolet.opacity(0.25), lineWidth: 1)
+                .strokeBorder(accent.opacity(0.25), lineWidth: 1)
         )
     }
 }
@@ -484,7 +487,7 @@ struct PreviewView: View {
     private func header(_ item: ClipItem) -> some View {
         HStack(spacing: 8) {
             if let label = item.label {
-                Image(systemName: "tag.fill").font(.system(size: 10)).foregroundColor(brandPink)
+                Image(systemName: "tag.fill").font(.system(size: 10)).foregroundColor(accent)
                 Text(label).font(.system(size: 13, weight: .semibold))
             } else {
                 Text(item.preview).font(.system(size: 13, weight: .semibold)).lineLimit(1)
@@ -576,11 +579,11 @@ struct ClipRow: View {
                 // "in or out", not the content type.
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(brandGradient.opacity(0.13))
+                        .fill(accent.opacity(0.13))
                         .frame(width: 28, height: 28)
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(brandGradient)
+                        .foregroundColor(accent)
                 }
             } else {
                 badge(flavor: flavor, swatch: swatch)
@@ -590,7 +593,7 @@ struct ClipRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: "tag.fill")
                             .font(.system(size: 7.5))
-                            .foregroundColor(brandPink)
+                            .foregroundColor(accent)
                         Text(label)
                             .font(.system(size: 11, weight: .semibold))
                             .lineLimit(1)
@@ -609,14 +612,14 @@ struct ClipRow: View {
                 .fill(rowBackground)
         )
         .overlay {
-            // A single selection language: veil + stroke in the brand gradient,
+            // A single selection language: veil + stroke in the brand accent,
             // stronger for multi-selection, thin for the keyboard.
             if isMulti {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(brandGradient.opacity(0.7), lineWidth: 1.5)
+                    .strokeBorder(accent.opacity(0.65), lineWidth: 1.5)
             } else if isSelected {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(brandViolet.opacity(0.35), lineWidth: 1)
+                    .strokeBorder(accent.opacity(0.35), lineWidth: 1)
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -753,9 +756,9 @@ struct ClipRow: View {
     private func badge(flavor: TextFlavor, swatch: NSColor?) -> some View {
         let base = badgeColor(flavor)
         return ZStack {
+            // Flat pastel-card tint, no gradients.
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(LinearGradient(colors: [base.opacity(0.22), base.opacity(0.11)],
-                                     startPoint: .top, endPoint: .bottom))
+                .fill(base.opacity(0.16))
                 .frame(width: 28, height: 28)
             if let c = swatch {
                 Circle()
@@ -808,7 +811,7 @@ struct ClipRow: View {
                 if item.pinned {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 9))
-                        .foregroundColor(.orange)
+                        .foregroundColor(accent)
                 }
                 // The keycap stays visible on pinned items too: ⌘1 is precisely
                 // the shortcut of the most used item.
