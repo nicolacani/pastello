@@ -103,7 +103,7 @@ func fillCard(_ c: Card, base: NSColor, s: CGFloat, hairline: Bool) {
     p.stroke()
     NSGraphicsContext.restoreGraphicsState()
     if hairline {
-        NSColor.black.withAlphaComponent(0.10).setStroke()
+        NSColor.black.withAlphaComponent(0.08).setStroke()
         p.lineWidth = max(1, 2 * s)
         p.stroke()
     }
@@ -113,13 +113,14 @@ func renderIcon(px: Int) -> Data {
     let s = CGFloat(px) / 1024.0
     let rep = bitmap(px, px)
     inContext(rep) {
-        // Background: indigo→violet squircle warming toward magenta at bottom right
+        // Background: coral squircle, the brand accent. A light tonal shade
+        // (same hue, just brighter at the top): depth without rainbows.
         let bgRect = NSRect(x: 100 * s, y: 100 * s, width: 824 * s, height: 824 * s)
         let bg = NSBezierPath(roundedRect: bgRect, xRadius: 185 * s, yRadius: 185 * s)
-        NSGradient(colors: [color(0x352C9C), color(0x6B3BD6), color(0xA855E8)])!
-            .draw(in: bg, angle: -65)
+        NSGradient(colors: [color(0xF07A4A), color(0xE55A28)])!
+            .draw(in: bg, angle: -90)
         // glow behind the card group to lift it off the background
-        NSGradient(colors: [NSColor.white.withAlphaComponent(0.10),
+        NSGradient(colors: [NSColor.white.withAlphaComponent(0.08),
                             NSColor.white.withAlphaComponent(0)])!
             .draw(in: bg, relativeCenterPosition: NSPoint(x: -0.05, y: 0.10))
 
@@ -139,14 +140,14 @@ func renderIcon(px: Int) -> Data {
             }
         }
 
-        drop(18, 8, 0.20) { fillCard(cards.back, base: color(0xF79CCB), s: s, hairline: hairline) }
+        drop(18, 8, 0.20) { fillCard(cards.back, base: color(0x8FE0BE), s: s, hairline: hairline) }
         drop(18, 8, 0.20) { fillCard(cards.mid, base: color(0xFFD34D), s: s, hairline: hairline) }
         drop(32, 16, 0.28) { fillCard(cards.front, base: .white, s: s, hairline: hairline) }
 
         let f = cards.front
         // White card content: coral dot + text lines (adaptive)
         if medium {
-            color(0xFF9057).setFill()
+            color(0xE5551F).setFill()
             let dotR: CGFloat = full ? 22 : 26
             circle(cx: f.center.x, cy: f.center.y, x: -165, y: 70, radius: dotR, rot: f.rot, s: s).fill()
         }
