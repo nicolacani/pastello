@@ -43,6 +43,7 @@ struct ClipItem: Identifiable, Codable, Equatable {
     // init and the decode of the old history do not change.
     var label: String? = nil        // label given by the user ("Project X API key")
     var ocrText: String? = nil      // text recognized in images (Vision, local)
+    var transient: Bool? = nil      // captured from a transient write (dictation)
 
     func matchesContent(of other: ClipItem) -> Bool {
         guard kind == other.kind else { return false }

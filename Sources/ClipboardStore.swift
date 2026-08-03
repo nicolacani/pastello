@@ -16,6 +16,12 @@ final class ClipboardStore: ObservableObject {
     @Published var captureTransient: Bool {
         didSet { UserDefaults.standard.set(captureTransient, forKey: "captureTransient") }
     }
+    // After the ghost-restore of dictation apps, puts the dictated text back on
+    // the system clipboard: ⌘V pastes the dictation, not the old stuff the app
+    // has "kindly" restored.
+    @Published var keepDictationOnClipboard: Bool {
+        didSet { UserDefaults.standard.set(keepDictationOnClipboard, forKey: "keepDictationOnClipboard") }
+    }
     // Copies from these apps (bundle id) are never recorded: last line of defense
     // for apps that do not mark sensitive contents as Concealed.
     @Published var excludedApps: Set<String> {
@@ -52,10 +58,12 @@ final class ClipboardStore: ObservableObject {
     init() {
         UserDefaults.standard.register(defaults: [
             "captureTransient": true,
+            "keepDictationOnClipboard": true,
             "historyLimit": 50,
             "excludedApps": ["com.apple.keychainaccess"],
         ])
         captureTransient = UserDefaults.standard.bool(forKey: "captureTransient")
+        keepDictationOnClipboard = UserDefaults.standard.bool(forKey: "keepDictationOnClipboard")
         historyLimit = UserDefaults.standard.integer(forKey: "historyLimit")
         excludedApps = Set(UserDefaults.standard.stringArray(forKey: "excludedApps") ?? [])
         lastChangeCount = NSPasteboard.general.changeCount
@@ -101,7 +109,8 @@ final class ClipboardStore: ObservableObject {
         // Transient = passing content: normally excluded, but dictation apps use
         // it for the dictated text, so it is configurable.
         if typeIDs.contains("org.nspasteboard.ConcealedType") { return }
-        if typeIDs.contains("org.nspasteboard.TransientType") && !captureTransient { return }
+        let isTransient = typeIDs.contains("org.nspasteboard.TransientType")
+        if isTransient && !captureTransient { return }
 
         // org.nspasteboard.source carries the bundle id of whoever REALLY generated
         // the content (a background helper is not the frontmost app).
@@ -188,9 +197,11 @@ final class ClipboardStore: ObservableObject {
         if let s = pb.string(forType: .string) {
             guard !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             let capped = s.count > Self.maxTextLength ? String(s.prefix(Self.maxTextLength)) : s
-            add(ClipItem(id: UUID(), kind: .text, text: capped, imageFile: nil, imageHash: nil,
-                         imageWidth: nil, imageHeight: nil, date: Date(), pinned: false,
-                         appName: appName, appBundleID: appID))
+            var item = ClipItem(id: UUID(), kind: .text, text: capped, imageFile: nil, imageHash: nil,
+                                imageWidth: nil, imageHeight: nil, date: Date(), pinned: false,
+                                appName: appName, appBundleID: appID)
+            if isTransient { item.transient = true }
+            add(item)
         }
     }
 
@@ -214,7 +225,15 @@ final class ClipboardStore: ObservableObject {
             // right after pasting. If the "new" content is the item just below
             // the top and the top is very fresh, it is that restore:
             // do not re-promote it, it would bury the dictated text.
-            if idx == 1, Date().timeIntervalSince(items[0].date) < 6 { return }
+            if idx == 1, Date().timeIntervalSince(items[0].date) < 6 {
+                // And if the top is a dictation, put it back on the clipboard:
+                // if the app's auto-paste came to nothing, the manual ⌘V must
+                // paste the dictation, not the restored content.
+                if keepDictationOnClipboard, items[0].transient == true, items[0].kind == .text {
+                    copyToPasteboard(items[0])
+                }
+                return
+            }
             let old = items.remove(at: idx)
             item.pinned = old.pinned
             item.label = old.label

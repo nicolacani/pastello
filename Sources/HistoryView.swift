@@ -137,6 +137,8 @@ struct HistoryView: View {
             ))
             Toggle("Capture dictation", isOn: $store.captureTransient)
                 .help("Also record transient texts pasted by dictation apps (Myna, Wispr Flow…)")
+            Toggle("Dictation stays on the clipboard", isOn: $store.keepDictationOnClipboard)
+                .help("After a dictation, ⌘V pastes the dictated text even if the app restored the previous clipboard")
             Divider()
             Toggle("Pause capture", isOn: $store.isPaused)
             Button("Ignore next copy") { store.ignoreNextCopy = true }
