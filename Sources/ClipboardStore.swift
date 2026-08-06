@@ -10,9 +10,10 @@ final class ClipboardStore: ObservableObject {
     static let sourceType = NSPasteboard.PasteboardType("org.nspasteboard.source")
 
     @Published private(set) var items: [ClipItem] = []
-    // Captures the texts that dictation apps (Myna, Wispr Flow…) paste while
-    // marking them org.nspasteboard.TransientType and immediately restoring the
-    // previous clipboard. Concealed contents (passwords) ALWAYS stay excluded.
+    // Optional (off by default, per the nspasteboard convention): captures the
+    // transient texts that dictation apps paste and immediately restore. The
+    // official entry point for dictations is the pastello://add URL scheme, so
+    // the dictating app decides. Concealed contents (passwords) ALWAYS stay excluded.
     @Published var captureTransient: Bool {
         didSet { UserDefaults.standard.set(captureTransient, forKey: "captureTransient") }
     }
@@ -57,7 +58,7 @@ final class ClipboardStore: ObservableObject {
 
     init() {
         UserDefaults.standard.register(defaults: [
-            "captureTransient": true,
+            "captureTransient": false,
             "keepDictationOnClipboard": true,
             "historyLimit": 50,
             "excludedApps": ["com.apple.keychainaccess"],

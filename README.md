@@ -24,7 +24,7 @@ Every clipboard manager asks you to trade something: speed for features, privacy
 - **Multi-select**: ⌘click several texts, then paste them together as one or queue them with ⌥⌘V.
 - **Paste as…**: UPPERCASE, lowercase, on one line, or without spaces (perfect for IBANs and codes).
 - **Smart badges**: links, emails, code, hex colors (with a live swatch), image thumbnails, files.
-- **Dictation integration**: transient texts pasted by dictation apps (Myna, Wispr Flow…) are captured too, so nothing you dictate gets lost. When the dictation app restores the previous clipboard, Pastello puts the dictated text back on the clipboard, so ⌘V always pastes the latest dictation (can be turned off). And any app or Shortcut can push text straight into the history, without touching the clipboard, via the URL scheme `pastello://add?text=…&label=…&source=…`.
+- **Dictation integration**: the official entry point is the URL scheme `pastello://add?text=…&label=…&source=…`, which lets dictation apps, scripts and Shortcuts push text straight into the history without touching the clipboard: the dictating app decides, not Pastello. Alternatively, the gear menu offers "Capture dictation" to record transient texts (Wispr Flow and friends), with the option that puts the dictation back on the clipboard after the app's restore.
 - **Per-app exclusions**: tell Pastello to never record copies from specific apps (Keychain Access is excluded out of the box). One click from any clip, or pick apps from a panel.
 - **Privacy controls on tap**: pause capture, ignore the next copy, or delete the last 5 minutes of history.
 - **Invisible popover**: the Pastello window never appears in screenshots, screen recordings, or shared screens.
