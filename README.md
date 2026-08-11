@@ -2,6 +2,8 @@
 
 **The best clipboard manager for Mac: native, instant, private.**
 
+The mark and the icon speak the same visual language as the sibling apps Myna and Earshot: a white outline on charcoal, one shape and one detail.
+
 <img src="assets/logo-preview.png" alt="Pastello" width="160">
 
 ## Why Pastello
@@ -90,7 +92,8 @@ osascript -e 'quit app "Pastello"'; rm -rf /Applications/Pastello.app ~/Library/
   - `HistoryView.swift`: the popover UI, queue HUD, preview panel
   - `HotKey.swift`: global shortcuts via Carbon (no permissions needed)
   - `Models.swift`: item model, type detection, type filters
-- `tools/makeicon.swift`: generates the icon via CoreGraphics
+  - `BrandIcon.swift`: the mark, drawn in code (menu bar and header)
+- `tools/makeicon.swift`: generates the app icon and the menu bar previews
 - `build.sh`: build + ad-hoc signing
 
 ## License

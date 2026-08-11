@@ -22,7 +22,6 @@ swiftc -O -swift-version 5 -target arm64-apple-macos14.0 Sources/*.swift \
 
 cp Info.plist "$APP/Contents/Info.plist"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-cp assets/menubar/MenuBarIcon.png assets/menubar/MenuBarIcon@2x.png "$APP/Contents/Resources/"
 
 xattr -cr "$APP"
 # Designated requirement based on the bundle id alone: the Accessibility

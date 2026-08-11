@@ -98,11 +98,9 @@ struct HistoryView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            if let glyph = Bundle.main.image(forResource: "MenuBarIcon") {
-                Image(nsImage: glyph)
-                    .renderingMode(.template)
-                    .foregroundStyle(accent)
-            }
+            Image(nsImage: BrandIcon.statusImage())
+                .renderingMode(.template)
+                .foregroundStyle(accent)
             Text("Pastello")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)

@@ -1,242 +1,160 @@
-// Generates the Pastello app icon (the "refined v3" design picked by the judging panel):
-// a fan of pastel cards around a shared pivot on an indigo→violet background,
-// dark metal clip, size-adaptive detail. Also generates the outline-style
-// template glyph for the menu bar, consistent with the icon.
+// Generates the Pastello icon and the menu bar previews.
+// Same language as Myna and Earshot: monochrome charcoal background with a
+// veil of depth, rim light around the perimeter, white outline mark with a
+// transparent inside. The mark geometry is the same as Sources/BrandIcon.swift
+// (if you change the drawing there, update it here too).
 // Usage: swift tools/makeicon.swift assets
 import AppKit
-import Foundation
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "assets"
 let iconsetPath = outDir + "/AppIcon.iconset"
-let menubarPath = outDir + "/menubar"
 try FileManager.default.createDirectory(atPath: iconsetPath, withIntermediateDirectories: true)
-try FileManager.default.createDirectory(atPath: menubarPath, withIntermediateDirectories: true)
 
-func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
-    NSColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255.0,
-            green: CGFloat((hex >> 8) & 0xFF) / 255.0,
-            blue: CGFloat(hex & 0xFF) / 255.0,
-            alpha: alpha)
-}
+func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
 
-func deg(_ d: CGFloat) -> CGFloat { d * .pi / 180 }
-
-func path(cx: CGFloat, cy: CGFloat, x: CGFloat = 0, y: CGFloat = 0,
-          w: CGFloat, h: CGFloat, r: CGFloat, rot: CGFloat, s: CGFloat) -> NSBezierPath {
-    let rect = NSRect(x: (x - w / 2) * s, y: (y - h / 2) * s, width: w * s, height: h * s)
-    let p = NSBezierPath(roundedRect: rect, xRadius: r * s, yRadius: r * s)
-    p.transform(using: AffineTransform(rotationByDegrees: rot))
-    p.transform(using: AffineTransform(translationByX: cx * s, byY: cy * s))
-    return p
-}
-
-func circle(cx: CGFloat, cy: CGFloat, x: CGFloat, y: CGFloat, radius: CGFloat,
-            rot: CGFloat, s: CGFloat) -> NSBezierPath {
-    let rect = NSRect(x: (x - radius) * s, y: (y - radius) * s,
-                      width: radius * 2 * s, height: radius * 2 * s)
-    let p = NSBezierPath(ovalIn: rect)
-    p.transform(using: AffineTransform(rotationByDegrees: rot))
-    p.transform(using: AffineTransform(translationByX: cx * s, byY: cy * s))
-    return p
-}
-
-func withShadow(blur: CGFloat, dy: CGFloat, alpha: CGFloat, _ draw: () -> Void) {
-    NSGraphicsContext.saveGraphicsState()
-    let sh = NSShadow()
-    sh.shadowBlurRadius = blur
-    sh.shadowOffset = NSSize(width: 0, height: -dy)
-    sh.shadowColor = NSColor.black.withAlphaComponent(alpha)
-    sh.set()
-    draw()
-    NSGraphicsContext.restoreGraphicsState()
-}
-
-func bitmap(_ wpx: Int, _ hpx: Int) -> NSBitmapImageRep {
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: wpx, pixelsHigh: hpx,
+func bitmap(_ w: Int, _ h: Int) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                isPlanar: false, colorSpaceName: .deviceRGB,
                                bytesPerRow: 0, bitsPerPixel: 0)!
-    rep.size = NSSize(width: wpx, height: hpx)
+    rep.size = NSSize(width: w, height: h)
     return rep
 }
 
-func inContext(_ rep: NSBitmapImageRep, _ draw: () -> Void) {
+func inContext(_ rep: NSBitmapImageRep, _ draw: (NSGraphicsContext) -> Void) {
     NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-    draw()
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)!
+    NSGraphicsContext.current = ctx
+    ctx.cgContext.setShouldAntialias(true)
+    draw(ctx)
+    ctx.flushGraphics()
     NSGraphicsContext.restoreGraphicsState()
 }
 
-func png(_ rep: NSBitmapImageRep) -> Data { rep.representation(using: .png, properties: [:])! }
+// MARK: - Mark (twin of Sources/BrandIcon.swift)
 
-// MARK: - App icon (1024 grid, fan around a shared pivot)
-
-struct Card {
-    let rot: CGFloat
-    let w: CGFloat
-    let h: CGFloat
-    let center: NSPoint
-}
-
-// Pivot at bottom center: the cards rotate like a fan of cards in hand.
-func makeCards() -> (back: Card, mid: Card, front: Card) {
-    let pivot = NSPoint(x: 512, y: 285)
-    let dist: CGFloat = 215
-    func card(rot: CGFloat, w: CGFloat, h: CGFloat) -> Card {
-        let cx = pivot.x - dist * sin(deg(rot))
-        let cy = pivot.y + dist * cos(deg(rot))
-        return Card(rot: rot, w: w, h: h, center: NSPoint(x: cx, y: cy))
+func drawMark(in box: NSRect, lineWidth: CGFloat, color: NSColor) {
+    // The drawing is 0.76 tall in unit coordinates: it grows around the
+    // center so it fills the square the way the other two marks do,
+    // without touching the stroke weight (which stays the family's).
+    let grow: CGFloat = 1.0
+    func map(_ path: NSBezierPath) -> NSBezierPath {
+        let copy = path.copy() as! NSBezierPath
+        var t = AffineTransform()
+        t.translate(x: box.midX, y: box.midY)
+        t.scale(x: box.width * grow, y: box.height * grow)
+        t.translate(x: -0.5, y: -0.5)
+        copy.transform(using: t)
+        return copy
     }
-    return (card(rot: 16, w: 484, h: 352), card(rot: 7, w: 492, h: 360), card(rot: -3, w: 500, h: 368))
+
+    func stroke(_ path: NSBezierPath) {
+        let m = map(path)
+        color.setStroke()
+        m.lineWidth = lineWidth
+        m.lineCapStyle = .round
+        m.lineJoinStyle = .round
+        m.stroke()
+    }
+
+    /// Rectangle with filleted corners, built from vertices and tangent
+    /// arcs. Separate radii at the top and at the bottom: tight top
+    /// corners keep the upper edge flat, and that is what tells a board
+    /// apart from a bottle with a cap.
+    func rrect(_ l: CGFloat, _ b: CGFloat, _ r: CGFloat, _ t: CGFloat,
+               _ rBottom: CGFloat, _ rTop: CGFloat? = nil) -> NSBezierPath {
+        let pts = [P(l, b), P(r, b), P(r, t), P(l, t)]
+        let radii = [rBottom, rBottom, rTop ?? rBottom, rTop ?? rBottom]
+        let path = NSBezierPath()
+        path.move(to: CGPoint(x: (pts[3].x + pts[0].x) / 2, y: (pts[3].y + pts[0].y) / 2))
+        for i in 0..<4 {
+            path.appendArc(from: pts[i], to: pts[(i + 1) % 4], radius: radii[i])
+        }
+        path.close()
+        return path
+    }
+
+    // Board: the dominant shape.
+    stroke(rrect(0.190, 0.030, 0.810, 0.840, 0.125, 0.085))
+
+    // Clip: its area (plus a margin) is carved out, so the board outline
+    // breaks off cleanly where the clip passes instead of crossing it or
+    // touching it: under that light, at 18 pt, the head becomes a blob.
+    let clip = rrect(0.350, 0.750, 0.650, 0.970, 0.055)
+    let mapped = map(clip)
+    let ctx = NSGraphicsContext.current!
+    ctx.compositingOperation = .destinationOut
+    NSColor.black.setFill()
+    NSColor.black.setStroke()
+    mapped.fill()
+    mapped.lineWidth = lineWidth * 2.2
+    mapped.lineJoinStyle = .round
+    mapped.stroke()
+    ctx.compositingOperation = .sourceOver
+    stroke(clip)
 }
 
-// Card with a vertical gradient and a sliver of light along the top edge.
-func fillCard(_ c: Card, base: NSColor, s: CGFloat, hairline: Bool) {
-    let p = path(cx: c.center.x, cy: c.center.y, w: c.w, h: c.h, r: 44, rot: c.rot, s: s)
-    let darker = base.blended(withFraction: 0.10, of: .black) ?? base
-    NSGradient(colors: [base, darker])!.draw(in: p, angle: -90)
-    // inner light on the edge (clipped to the card)
-    NSGraphicsContext.saveGraphicsState()
-    p.addClip()
-    NSColor.white.withAlphaComponent(0.22).setStroke()
-    p.lineWidth = 5 * s
-    p.stroke()
-    NSGraphicsContext.restoreGraphicsState()
-    if hairline {
-        NSColor.black.withAlphaComponent(0.08).setStroke()
-        p.lineWidth = max(1, 2 * s)
-        p.stroke()
+/// The mark on a transparent canvas: the occlusion carves out the alpha, so
+/// it cannot be drawn straight over a background that is already painted.
+func markImage(px: Int, color: NSColor, widthRatio: CGFloat) -> NSImage {
+    let rep = bitmap(px, px)
+    inContext(rep) { _ in
+        let side = CGFloat(px)
+        let lineWidth = side * widthRatio
+        let inset = 0.5 + lineWidth / 2
+        drawMark(in: NSRect(x: 0, y: 0, width: side, height: side).insetBy(dx: inset, dy: inset),
+                 lineWidth: lineWidth, color: color)
     }
+    let image = NSImage(size: NSSize(width: px, height: px))
+    image.addRepresentation(rep)
+    return image
 }
+
+// MARK: - App icon
 
 func renderIcon(px: Int) -> Data {
-    let s = CGFloat(px) / 1024.0
     let rep = bitmap(px, px)
-    inContext(rep) {
-        // Background: coral squircle, the brand accent. A light tonal shade
-        // (same hue, just brighter at the top): depth without rainbows.
-        let bgRect = NSRect(x: 100 * s, y: 100 * s, width: 824 * s, height: 824 * s)
-        let bg = NSBezierPath(roundedRect: bgRect, xRadius: 185 * s, yRadius: 185 * s)
-        NSGradient(colors: [color(0xF07A4A), color(0xE55A28)])!
-            .draw(in: bg, angle: -90)
-        // glow behind the card group to lift it off the background
-        NSGradient(colors: [NSColor.white.withAlphaComponent(0.08),
-                            NSColor.white.withAlphaComponent(0)])!
-            .draw(in: bg, relativeCenterPosition: NSPoint(x: -0.05, y: 0.10))
+    inContext(rep) { _ in
+        let c = CGFloat(px)
+        let rect = NSRect(x: 0, y: 0, width: c, height: c).insetBy(dx: c * 0.098, dy: c * 0.098)
+        let radius = rect.width * 0.225
+        let shape = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
-        let cards = makeCards()
-        // Detail level per size: below 64px the details turn to mush.
-        let full = px >= 128
-        let medium = px >= 64
-        let simple = px >= 32
-        let shadowMul: CGFloat = full ? 1.0 : (medium ? 0.5 : 0)
-        let hairline = shadowMul == 0
+        // Monochrome: charcoal with a veil of depth, no colors
+        let top = NSColor(srgbRed: 0.165, green: 0.165, blue: 0.180, alpha: 1.0)
+        let bottom = NSColor(srgbRed: 0.070, green: 0.070, blue: 0.082, alpha: 1.0)
+        NSGradient(colors: [bottom, top], atLocations: [0.0, 1.0], colorSpace: .sRGB)!
+            .draw(in: shape, angle: 90)
 
-        func drop(_ blur: CGFloat, _ dy: CGFloat, _ a: CGFloat, _ f: () -> Void) {
-            if shadowMul > 0 {
-                withShadow(blur: blur * s, dy: dy * s, alpha: a * shadowMul, f)
-            } else {
-                f()
-            }
-        }
+        // Rim light around the perimeter
+        NSGraphicsContext.saveGraphicsState()
+        shape.addClip()
+        NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.09).setStroke()
+        let rim = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        rim.lineWidth = c * 0.005
+        rim.stroke()
+        NSGraphicsContext.restoreGraphicsState()
 
-        drop(18, 8, 0.20) { fillCard(cards.back, base: color(0x8FE0BE), s: s, hairline: hairline) }
-        drop(18, 8, 0.20) { fillCard(cards.mid, base: color(0xFFD34D), s: s, hairline: hairline) }
-        drop(32, 16, 0.28) { fillCard(cards.front, base: .white, s: s, hairline: hairline) }
-
-        let f = cards.front
-        // White card content: coral dot + text lines (adaptive)
-        if medium {
-            color(0xE5551F).setFill()
-            let dotR: CGFloat = full ? 22 : 26
-            circle(cx: f.center.x, cy: f.center.y, x: -165, y: 70, radius: dotR, rot: f.rot, s: s).fill()
-        }
-        color(0xC6CDDA).setFill()
-        if full {
-            path(cx: f.center.x, cy: f.center.y, x: 35, y: 70, w: 230, h: 30, r: 15, rot: f.rot, s: s).fill()
-            path(cx: f.center.x, cy: f.center.y, x: -15, y: 5, w: 330, h: 30, r: 15, rot: f.rot, s: s).fill()
-            path(cx: f.center.x, cy: f.center.y, x: -60, y: -60, w: 240, h: 30, r: 15, rot: f.rot, s: s).fill()
-        } else if simple {
-            path(cx: f.center.x, cy: f.center.y, x: 30, y: 60, w: 240, h: 42, r: 21, rot: f.rot, s: s).fill()
-            path(cx: f.center.x, cy: f.center.y, x: -30, y: -35, w: 300, h: 42, r: 21, rot: f.rot, s: s).fill()
-        }
-
-        // Dark metal clip straddling the top edge, with a punched hole
-        drop(12, 7, 0.28) {
-            let clip = path(cx: f.center.x, cy: f.center.y, x: 0, y: 190, w: 200, h: 100, r: 34, rot: f.rot, s: s)
-            NSGradient(colors: [color(0x8B98AA), color(0x5A6879)])!.draw(in: clip, angle: -90)
-        }
-        if medium {
-            // specular highlight on the clip's top edge
-            color(0xE8EDF4, 0.55).setFill()
-            path(cx: f.center.x, cy: f.center.y, x: 0, y: 224, w: 150, h: 9, r: 4.5, rot: f.rot, s: s).fill()
-        }
-        // hole: dark rim + white interior
-        color(0x414C5B).setFill()
-        circle(cx: f.center.x, cy: f.center.y, x: 0, y: 162, radius: 25, rot: f.rot, s: s).fill()
-        NSColor.white.setFill()
-        circle(cx: f.center.x, cy: f.center.y, x: 0, y: 160, radius: 19, rot: f.rot, s: s).fill()
+        // The mark: medium white outline, transparent inside
+        let markBox = rect.insetBy(dx: rect.width * 0.20, dy: rect.width * 0.20)
+        let side = max(Int(markBox.width.rounded()), 16)
+        markImage(px: side, color: .white, widthRatio: 0.052).draw(in: markBox)
     }
-    return png(rep)
+    return rep.representation(using: .png, properties: [:])!
 }
 
-// MARK: - Menu bar glyph (18pt grid, SF Symbols-style outline)
+// MARK: - Menu bar previews
 
-func glyphInto(_ s: CGFloat, _ ink: NSColor) {
-    let ctx = NSGraphicsContext.current!
-    let stroke: CGFloat = 1.25 * s
-    ink.setStroke()
-    ink.setFill()
-
-    let frontCX: CGFloat = 9.6, frontCY: CGFloat = 7.7, frontRot: CGFloat = -6
-
-    // Edge of the back card peeking out at top left
-    let back = path(cx: 7.6, cy: 9.7, w: 11.0, h: 8.2, r: 1.9, rot: 8, s: s)
-    back.lineWidth = stroke
-    back.stroke()
-
-    // The front card's area (with margin) erases whatever passes underneath
-    let front = path(cx: frontCX, cy: frontCY, w: 11.6, h: 8.6, r: 2.0, rot: frontRot, s: s)
-    ctx.compositingOperation = .destinationOut
-    front.fill()
-    front.lineWidth = 3.2 * s
-    front.stroke()
-    ctx.compositingOperation = .sourceOver
-
-    // Front card as an outline
-    front.lineWidth = stroke
-    front.stroke()
-
-    // Clip tab straddling the top edge: first a gap is opened in the card's
-    // stroke, then the tab and its little dot are drawn.
-    let tab = path(cx: frontCX, cy: frontCY, x: 0, y: 4.3, w: 4.8, h: 2.7, r: 1.1, rot: frontRot, s: s)
-    ctx.compositingOperation = .destinationOut
-    tab.fill()
-    tab.lineWidth = 2.2 * s
-    tab.stroke()
-    ctx.compositingOperation = .sourceOver
-    tab.lineWidth = stroke
-    tab.stroke()
-    circle(cx: frontCX, cy: frontCY, x: 0, y: 4.3, radius: 0.8, rot: frontRot, s: s).fill()
-}
-
-func renderGlyph(px: Int, ink: NSColor) -> Data {
-    let rep = bitmap(px, px)
-    inContext(rep) { glyphInto(CGFloat(px) / 18.0, ink) }
-    return png(rep)
-}
-
-func renderStrip(dark: Bool) -> Data {
-    // The glyph must be rendered in its own bitmap: it uses destinationOut,
-    // which in a shared bitmap would punch through the strip's background too.
-    let glyphImg = NSImage(data: renderGlyph(px: 36, ink: dark ? .white : .black))!
+func strip(dark: Bool) -> Data {
     let rep = bitmap(600, 88)
-    inContext(rep) {
-        (dark ? color(0x1D1D1F) : color(0xF2F2F7)).setFill()
+    inContext(rep) { _ in
+        (dark ? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1)
+              : NSColor(srgbRed: 0.95, green: 0.95, blue: 0.96, alpha: 1)).setFill()
         NSBezierPath(rect: NSRect(x: 0, y: 0, width: 600, height: 88)).fill()
-        glyphImg.draw(in: NSRect(x: 40, y: 26, width: 36, height: 36))
+        markImage(px: 36, color: dark ? .white : .black, widthRatio: 0.065)
+            .draw(in: NSRect(x: 40, y: 26, width: 36, height: 36))
     }
-    return png(rep)
+    return rep.representation(using: .png, properties: [:])!
 }
 
 // MARK: - Output
@@ -252,8 +170,6 @@ for (name, px) in specs {
     try renderIcon(px: px).write(to: URL(fileURLWithPath: iconsetPath + "/" + name))
 }
 try renderIcon(px: 512).write(to: URL(fileURLWithPath: outDir + "/logo-preview.png"))
-try renderGlyph(px: 18, ink: .black).write(to: URL(fileURLWithPath: menubarPath + "/MenuBarIcon.png"))
-try renderGlyph(px: 36, ink: .black).write(to: URL(fileURLWithPath: menubarPath + "/MenuBarIcon@2x.png"))
-try renderStrip(dark: false).write(to: URL(fileURLWithPath: outDir + "/menubar-light.png"))
-try renderStrip(dark: true).write(to: URL(fileURLWithPath: outDir + "/menubar-dark.png"))
-print("Icon, glyph and previews written to \(outDir)")
+try strip(dark: false).write(to: URL(fileURLWithPath: outDir + "/menubar-light.png"))
+try strip(dark: true).write(to: URL(fileURLWithPath: outDir + "/menubar-dark.png"))
+print("Icon and previews written to \(outDir)")

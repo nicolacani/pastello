@@ -34,15 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            // Custom glyph consistent with the app icon; template so macOS
-            // tints it on its own in light/dark mode.
-            if let icon = Bundle.main.image(forResource: "MenuBarIcon") {
-                icon.isTemplate = true
-                icon.size = NSSize(width: 18, height: 18)
-                button.image = icon
-            } else {
-                button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pastello")
-            }
+            // Same mark as the app icon, drawn in code: template, so macOS
+            // tints it on its own in a light or dark menu bar.
+            button.image = BrandIcon.statusImage()
             button.target = self
             button.action = #selector(statusItemClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
