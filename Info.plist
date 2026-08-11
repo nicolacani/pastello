@@ -2,28 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>Pastello</string>
 	<key>CFBundleDisplayName</key>
 	<string>Pastello</string>
+	<key>CFBundleExecutable</key>
+	<string>Pastello</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>it.foolica.pastello</string>
-	<key>CFBundleExecutable</key>
+	<key>CFBundleName</key>
 	<string>Pastello</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.8.1</string>
-	<key>CFBundleVersion</key>
-	<string>14</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
-	<key>LSUIElement</key>
-	<true/>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.productivity</string>
+	<string>1.9</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -35,9 +27,17 @@
 			</array>
 		</dict>
 	</array>
-	<key>NSHumanReadableCopyright</key>
-	<string>© 2026 Nicola Cani</string>
+	<key>CFBundleVersion</key>
+	<string>15</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Nicola Cani</string>
 </dict>
 </plist>
