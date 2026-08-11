@@ -1,8 +1,12 @@
 // Generates the Pastello icon and the menu bar previews.
-// Same language as Myna and Earshot: monochrome charcoal background with a
-// veil of depth, rim light around the perimeter, white outline mark with a
-// transparent inside. The mark geometry is the same as Sources/BrandIcon.swift
-// (if you change the drawing there, update it here too).
+// Same language as Inkdown, Myna and Earshot: Big Sur rounded rect, warm cream
+// background, outline mark with a transparent inside in the app's own dark
+// tint, one ORANGE accent — the shared signature — on a detail that means
+// something (here the CLIP, the part that grabs), and a thin dark edge that
+// keeps the icon off light backgrounds (without it, at 16 px on the Finder's
+// white the tile disappears).
+// The mark geometry is the same as Sources/BrandIcon.swift (if you change the
+// drawing there, update it here too).
 // Usage: swift tools/makeicon.swift assets
 import AppKit
 
@@ -11,6 +15,16 @@ let iconsetPath = outDir + "/AppIcon.iconset"
 try FileManager.default.createDirectory(atPath: iconsetPath, withIntermediateDirectories: true)
 
 func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+
+// MARK: - Family palette (anchored to the Inkdown icon)
+
+let creamTop    = NSColor(srgbRed: 0xF7/255.0, green: 0xF5/255.0, blue: 0xEE/255.0, alpha: 1)
+let creamBottom = NSColor(srgbRed: 0xED/255.0, green: 0xE9/255.0, blue: 0xDE/255.0, alpha: 1)
+/// Pastello's own dark tint: a very dark grey-olive (Myna pulls to cold grey,
+/// Earshot to warm espresso). It tells the apps apart without breaking the set.
+let markColor   = NSColor(srgbRed: 0x2A/255.0, green: 0x2A/255.0, blue: 0x24/255.0, alpha: 1)
+/// The accent shared by the whole family.
+let accentColor = NSColor(srgbRed: 0xC0/255.0, green: 0x56/255.0, blue: 0x2A/255.0, alpha: 1)
 
 func bitmap(_ w: Int, _ h: Int) -> NSBitmapImageRep {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
@@ -33,7 +47,9 @@ func inContext(_ rep: NSBitmapImageRep, _ draw: (NSGraphicsContext) -> Void) {
 
 // MARK: - Mark (twin of Sources/BrandIcon.swift)
 
-func drawMark(in box: NSRect, lineWidth: CGFloat, color: NSColor) {
+/// `accent == nil` → the clip takes the same color as the board (menu bar
+/// glyph, which must stay one single template colour).
+func drawMark(in box: NSRect, lineWidth: CGFloat, color: NSColor, accent: NSColor? = nil) {
     // The drawing is 0.76 tall in unit coordinates: it grows around the
     // center so it fills the square the way the other two marks do,
     // without touching the stroke weight (which stays the family's).
@@ -48,9 +64,9 @@ func drawMark(in box: NSRect, lineWidth: CGFloat, color: NSColor) {
         return copy
     }
 
-    func stroke(_ path: NSBezierPath) {
+    func stroke(_ path: NSBezierPath, _ ink: NSColor? = nil) {
         let m = map(path)
-        color.setStroke()
+        (ink ?? color).setStroke()
         m.lineWidth = lineWidth
         m.lineCapStyle = .round
         m.lineJoinStyle = .round
@@ -91,19 +107,24 @@ func drawMark(in box: NSRect, lineWidth: CGFloat, color: NSColor) {
     mapped.lineJoinStyle = .round
     mapped.stroke()
     ctx.compositingOperation = .sourceOver
-    stroke(clip)
+    // The clip is the one thing that grabs, so it carries the family's orange.
+    stroke(clip, accent)
 }
 
 /// The mark on a transparent canvas: the occlusion carves out the alpha, so
 /// it cannot be drawn straight over a background that is already painted.
-func markImage(px: Int, color: NSColor, widthRatio: CGFloat) -> NSImage {
+/// `minLineWidth` is the family floor (one pixel of the finished tile) brought
+/// back into this canvas' scale: without it, at 16 px the stroke would come out
+/// under half a pixel and the dark mark would fade into the cream.
+func markImage(px: Int, color: NSColor, accent: NSColor? = nil,
+               widthRatio: CGFloat, minLineWidth: CGFloat = 0) -> NSImage {
     let rep = bitmap(px, px)
     inContext(rep) { _ in
         let side = CGFloat(px)
-        let lineWidth = side * widthRatio
+        let lineWidth = max(side * widthRatio, minLineWidth)
         let inset = 0.5 + lineWidth / 2
         drawMark(in: NSRect(x: 0, y: 0, width: side, height: side).insetBy(dx: inset, dy: inset),
-                 lineWidth: lineWidth, color: color)
+                 lineWidth: lineWidth, color: color, accent: accent)
     }
     let image = NSImage(size: NSSize(width: px, height: px))
     image.addRepresentation(rep)
@@ -120,26 +141,34 @@ func renderIcon(px: Int) -> Data {
         let radius = rect.width * 0.225
         let shape = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
-        // Monochrome: charcoal with a veil of depth, no colors
-        let top = NSColor(srgbRed: 0.165, green: 0.165, blue: 0.180, alpha: 1.0)
-        let bottom = NSColor(srgbRed: 0.070, green: 0.070, blue: 0.082, alpha: 1.0)
-        NSGradient(colors: [bottom, top], atLocations: [0.0, 1.0], colorSpace: .sRGB)!
+        // Warm cream, a touch lighter at the top.
+        NSGradient(colors: [creamBottom, creamTop], atLocations: [0.0, 1.0], colorSpace: .sRGB)!
             .draw(in: shape, angle: 90)
 
-        // Rim light around the perimeter
         NSGraphicsContext.saveGraphicsState()
         shape.addClip()
-        NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.09).setStroke()
-        let rim = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        rim.lineWidth = c * 0.005
-        rim.stroke()
-        NSGraphicsContext.restoreGraphicsState()
 
         // The mark is 0.94 tall inside its own square and has to cover 74% of
-        // the tile, like the bird in Myna and the ear in Earshot.
+        // the tile, like the bird in Myna and the ear in Earshot. It is drawn
+        // on a transparent canvas of its own and only then composited, because
+        // the clip carves the board's alpha: over an already painted background
+        // that occlusion would punch a hole in the cream too.
         let markBox = rect.insetBy(dx: rect.width * 0.1065, dy: rect.width * 0.1065)
         let side = max(Int(markBox.width.rounded()), 16)
-        markImage(px: side, color: .white, widthRatio: 0.0411).draw(in: markBox)
+        // The family stroke is max(tile * 0.026, 1) — in this canvas' scale.
+        let toTile = markBox.width / CGFloat(side)
+        markImage(px: side, color: markColor, accent: accentColor,
+                  widthRatio: 0.0411, minLineWidth: 1.0 / toTile).draw(in: markBox)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        // Edge: drawn LAST and outside the clip, otherwise the shape would cut
+        // it in half. It is what keeps the icon off light backgrounds at the
+        // small sizes.
+        NSColor(white: 0, alpha: 0.22).setStroke()
+        let edge = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        edge.lineWidth = max(c * 0.014, 1.0)
+        edge.stroke()
     }
     return rep.representation(using: .png, properties: [:])!
 }
