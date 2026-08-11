@@ -2,7 +2,7 @@
 
 **The best clipboard manager for Mac: native, instant, private.**
 
-The mark and the icon speak the same visual language as the sibling apps Myna and Earshot: a white outline on charcoal, one shape and one detail.
+The mark and the icon speak the same visual language as the sibling apps Inkdown, Myna and Earshot: a warm cream tile, an outline mark in a deep grey-olive, and the family orange on the clip, the part that grabs.
 
 <img src="assets/logo-preview.png" alt="Pastello" width="160">
 
