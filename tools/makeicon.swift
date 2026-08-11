@@ -135,10 +135,11 @@ func renderIcon(px: Int) -> Data {
         rim.stroke()
         NSGraphicsContext.restoreGraphicsState()
 
-        // The mark: medium white outline, transparent inside
-        let markBox = rect.insetBy(dx: rect.width * 0.20, dy: rect.width * 0.20)
+        // The mark is 0.94 tall inside its own square and has to cover 74% of
+        // the tile, like the bird in Myna and the ear in Earshot.
+        let markBox = rect.insetBy(dx: rect.width * 0.1065, dy: rect.width * 0.1065)
         let side = max(Int(markBox.width.rounded()), 16)
-        markImage(px: side, color: .white, widthRatio: 0.052).draw(in: markBox)
+        markImage(px: side, color: .white, widthRatio: 0.0411).draw(in: markBox)
     }
     return rep.representation(using: .png, properties: [:])!
 }
