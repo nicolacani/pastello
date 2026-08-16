@@ -7,17 +7,23 @@ import AppKit
 /// the drawing there, update it here too.
 enum BrandIcon {
 
+    /// The parts of the mark. The popover header needs them so it can recolour
+    /// the clip alone the way the app icon does: there the orange sits on the
+    /// part that grabs, not on the whole drawing. The menu bar uses `.all`,
+    /// because a template image has to stay a single colour.
+    enum Part { case all, board, clip }
+
     /// Glyph for NSStatusItem: rendered @2x, 18×18 logical pt.
     /// `color == nil` → template image (adapts to a light or dark menu bar).
     private static var cache: [String: NSImage] = [:]
 
-    static func statusImage(color: NSColor? = nil) -> NSImage {
+    static func statusImage(color: NSColor? = nil, part: Part = .all) -> NSImage {
         // The appearance is part of the key: an image rendered in light mode
         // would stay wrong after the switch to dark.
         let appearance = NSApp.effectiveAppearance.name.rawValue
-        let key = "\(color.map { $0.description } ?? "template")-\(appearance)"
+        let key = "\(color.map { $0.description } ?? "template")-\(part)-\(appearance)"
         if let cached = cache[key] { return cached }
-        let image = renderMark(pixels: 36, color: color ?? .black, widthRatio: 0.065)
+        let image = renderMark(pixels: 36, color: color ?? .black, widthRatio: 0.065, part: part)
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = (color == nil)
         cache[key] = image
@@ -29,7 +35,8 @@ enum BrandIcon {
     /// The mark on a transparent background. Occluding the card behind means
     /// carving out the alpha, so it needs a canvas of its own: it cannot be
     /// drawn straight into a context that has already been painted.
-    static func renderMark(pixels: Int, color: NSColor, widthRatio: CGFloat) -> NSImage {
+    static func renderMark(pixels: Int, color: NSColor, widthRatio: CGFloat,
+                           part: Part = .all) -> NSImage {
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
                                    pixelsWide: pixels, pixelsHigh: pixels,
                                    bitsPerSample: 8, samplesPerPixel: 4,
@@ -47,7 +54,7 @@ enum BrandIcon {
         let lineWidth = side * widthRatio
         let inset = 0.5 + lineWidth / 2
         let box = NSRect(x: 0, y: 0, width: side, height: side).insetBy(dx: inset, dy: inset)
-        draw(in: box, lineWidth: lineWidth, color: color)
+        draw(in: box, lineWidth: lineWidth, color: color, part: part)
 
         ctx.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
@@ -63,7 +70,7 @@ enum BrandIcon {
     /// merged into the outline gives a jar-like profile, and a third figure
     /// (the card behind) at 18 pt reads as an orphan stroke.
     /// Same grammar as the bird and the ear: one shape, one detail.
-    private static func draw(in box: NSRect, lineWidth: CGFloat, color: NSColor) {
+    private static func draw(in box: NSRect, lineWidth: CGFloat, color: NSColor, part: Part = .all) {
         func P(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
 
         // The drawing is 0.76 tall in unit coordinates: it grows around the
@@ -106,23 +113,31 @@ enum BrandIcon {
             return path
         }
 
-        // Board: the dominant shape.
-        stroke(rrect(0.190, 0.030, 0.810, 0.840, 0.125, 0.085))
-
-        // Clip: its area (plus a margin) is carved out, so the board outline
-        // breaks off cleanly where the clip passes instead of crossing it or
-        // touching it: under that light, at 18 pt, the head becomes a blob.
         let clip = rrect(0.350, 0.750, 0.650, 0.970, 0.055)
-        let mapped = map(clip)
-        let ctx = NSGraphicsContext.current!
-        ctx.compositingOperation = .destinationOut
-        NSColor.black.setFill()
-        NSColor.black.setStroke()
-        mapped.fill()
-        mapped.lineWidth = lineWidth * 2.2
-        mapped.lineJoinStyle = .round
-        mapped.stroke()
-        ctx.compositingOperation = .sourceOver
-        stroke(clip)
+
+        if part != .clip {
+            // Board: the dominant shape.
+            stroke(rrect(0.190, 0.030, 0.810, 0.840, 0.125, 0.085))
+
+            // The clip's area (plus a margin) is carved out so the board's edge
+            // breaks off cleanly where the clip runs, instead of crossing it or
+            // touching it: below that gap, at 18 pt, the head turns into a blob.
+            // The gap stays even when another layer draws the clip, and that is
+            // what keeps the two parts apart when they carry different colours.
+            let mapped = map(clip)
+            let ctx = NSGraphicsContext.current!
+            ctx.compositingOperation = .destinationOut
+            NSColor.black.setFill()
+            NSColor.black.setStroke()
+            mapped.fill()
+            mapped.lineWidth = lineWidth * 2.2
+            mapped.lineJoinStyle = .round
+            mapped.stroke()
+            ctx.compositingOperation = .sourceOver
+        }
+
+        if part != .board {
+            stroke(clip)
+        }
     }
 }

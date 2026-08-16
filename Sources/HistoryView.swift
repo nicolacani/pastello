@@ -98,9 +98,17 @@ struct HistoryView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(nsImage: BrandIcon.statusImage())
-                .renderingMode(.template)
-                .foregroundStyle(accent)
+            // Two template layers stacked: as in the app icon, the orange sits
+            // on the clip alone and the board follows the text colour, so it
+            // stays readable in dark mode too.
+            ZStack {
+                Image(nsImage: BrandIcon.statusImage(part: .board))
+                    .renderingMode(.template)
+                    .foregroundStyle(.primary)
+                Image(nsImage: BrandIcon.statusImage(part: .clip))
+                    .renderingMode(.template)
+                    .foregroundStyle(accent)
+            }
             Text("Pastello")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
