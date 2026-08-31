@@ -74,13 +74,39 @@ ditto build/Pastello.app /Applications/Pastello.app
 open /Applications/Pastello.app
 ```
 
+## Watchdog (coming back after a crash)
+
+macOS 26/27 has a ViewBridge bug that kills menu bar apps when the system
+reconnects the status item's scene (a Space switch, another app going
+fullscreen). Pastello defends itself on two fronts:
+
+- `Sources/ViewBridgeGuard.swift` neutralises the assertion that aborts the
+  process (a reordering notification sent to a detached remote view is ignored
+  instead of taking the app down);
+- the watchdog reopens Pastello if it disappears anyway without you quitting it.
+
+```bash
+./tools/watchdog.sh install     # LaunchAgent it.foolica.pastello.watchdog, checks every 60s
+./tools/watchdog.sh status      # active? recent reopenings?
+./tools/watchdog.sh uninstall
+```
+
+It leaves "open at login" alone (that stays the login item in the gear menu) and
+never reopens anything after a deliberate Quit: an orderly exit leaves a
+`clean-exit` file in the data folder, a crash does not. It waits two minutes of
+absence before stepping in, so it stays out of the way of a reinstall. Reopenings
+are logged in `~/Library/Logs/Pastello-watchdog.log`.
+
 ## Data location
 
-`~/Library/Application Support/Pastello/`: `history.json` plus `imgs/` for images. Nothing else, nowhere else.
+`~/Library/Application Support/Pastello/`: `history.json` plus `imgs/` for images,
+plus `clean-exit` and `watchdog.sh` if the watchdog is installed. Nothing else,
+nowhere else.
 
 ### Uninstall
 
 ```bash
+./tools/watchdog.sh uninstall
 osascript -e 'quit app "Pastello"'; rm -rf /Applications/Pastello.app ~/Library/Application\ Support/Pastello
 ```
 
@@ -93,7 +119,10 @@ osascript -e 'quit app "Pastello"'; rm -rf /Applications/Pastello.app ~/Library/
   - `HotKey.swift`: global shortcuts via Carbon (no permissions needed)
   - `Models.swift`: item model, type detection, type filters
   - `BrandIcon.swift`: the mark, drawn in code (menu bar and header)
+  - `ViewBridgeGuard.swift`: safety net against the macOS 26/27 ViewBridge crash
+  - `CrashWatchdog.swift`: the clean-exit mark read by the watchdog
 - `tools/makeicon.swift`: generates the app icon and the menu bar previews
+- `tools/watchdog.sh`: installs/removes the LaunchAgent that reopens the app after a crash
 - `build.sh`: build + ad-hoc signing
 
 ## License

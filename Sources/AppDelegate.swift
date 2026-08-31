@@ -27,6 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // Before anything else: the guard must be installed before the first
+        // remote view is born, and the clean-exit mark must go right away.
+        ViewBridgeGuard.install()
+        CrashWatchdog.appDidLaunch()
         activityToken = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep],
             reason: "Watching the clipboard")
@@ -89,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         store.flushSync()
+        CrashWatchdog.appWillTerminate()
     }
 
     // pastello://add?text=…&label=…&source=… for dictation apps and scripts:
